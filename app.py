@@ -1,51 +1,78 @@
 import streamlit as st
+import pandas as pd
+from models import load_dataset, train_models
+from plots import plot_confusion_matrix, plot_feature_importance, plot_roc
+from sklearn.tree import plot_tree
 import matplotlib.pyplot as plt
-from model_utils import train_decision_tree, train_bagging, train_boosting, roc_metrics
 
-st.title("Clasificación Wine Dataset")
+st.title("Wine Classification - Machine Learning Comparison")
 
-st.sidebar.header("Parámetros")
+st.sidebar.header("Hyperparameters")
 
-max_depth = st.sidebar.slider("Profundidad del árbol", 1, 10, 3)
-n_estimators = st.sidebar.slider("Número de estimadores", 10, 200, 50)
+max_depth = st.sidebar.slider("Max Depth", 1, 10, 3)
 
-st.header("Resultados")
+n_estimators = st.sidebar.slider("Number of Estimators", 10, 200, 50)
 
-st.subheader("Decision Tree")
+X, y, wine = load_dataset()
 
-mean_acc, std_acc = train_decision_tree(max_depth)
+results, X_test, y_test = train_models(max_depth, n_estimators)
 
-st.write("Accuracy promedio:", mean_acc)
-st.write("Desviación:", std_acc)
+st.header("Model Comparison")
 
-st.subheader("Bagging")
+data = []
 
-mean_acc, std_acc = train_bagging(max_depth, n_estimators)
+for name, res in results.items():
 
-st.write("Accuracy promedio:", mean_acc)
-st.write("Desviación:", std_acc)
+    data.append({
+        "Model": name,
+        "Accuracy": res["accuracy"],
+        "Std": res["std"]
+    })
 
-st.subheader("Boosting")
+df = pd.DataFrame(data)
 
-mean_acc, std_acc = train_boosting(n_estimators)
+st.dataframe(df)
 
-st.write("Accuracy promedio:", mean_acc)
-st.write("Desviación:", std_acc)
+st.bar_chart(df.set_index("Model")["Accuracy"])
 
-st.subheader("Curva ROC")
 
-fpr, tpr, roc_auc = roc_metrics()
+model_name = st.selectbox(
+    "Select model for analysis",
+    list(results.keys())
+)
 
-fig, ax = plt.subplots()
+model = results[model_name]["model"]
 
-for i in range(3):
-    ax.plot(fpr[i], tpr[i], label=f'Clase {i} AUC={roc_auc[i]:.2f}')
+st.subheader("Confusion Matrix")
 
-ax.plot([0,1],[0,1],'--')
-
-ax.set_xlabel("False Positive Rate")
-ax.set_ylabel("True Positive Rate")
-ax.set_title("ROC Curve")
-ax.legend()
+fig = plot_confusion_matrix(results[model_name]["cm"])
 
 st.pyplot(fig)
+
+st.subheader("ROC Curve")
+
+fig = plot_roc(model, X_test, y_test)
+
+st.pyplot(fig)
+
+
+if model_name == "Decision Tree":
+
+    st.subheader("Feature Importance")
+
+    fig = plot_feature_importance(model, wine.feature_names)
+
+    st.pyplot(fig)
+
+    st.subheader("Decision Tree Visualization")
+
+    fig, ax = plt.subplots(figsize=(12,8))
+
+    plot_tree(
+        model,
+        feature_names=wine.feature_names,
+        class_names=wine.target_names,
+        filled=True
+    )
+
+    st.pyplot(fig)
